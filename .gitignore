@@ -1,0 +1,5 @@
+rules/
+__pycache__/
+*.pyc
+reports/test-results.txt
+reports/sample-cli.json
