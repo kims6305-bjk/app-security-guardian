@@ -27,6 +27,19 @@ Small teams and solo builders ship web apps without a security review. Commercia
 - Secret values, source snippets and response bodies are never written to reports (gitleaks `--redact`)
 - If any tool is missing or fails, the result is **exit 3 (PARTIAL)** — never reported as "clean"
 
+## Use it as an agent skill
+
+The repo root is a ready-made skill (`SKILL.md`, standard `name` + `description` frontmatter). Clone it into your agent's skills folder and just ask, e.g. *"security-check my app in ./my-app"*:
+
+| Agent | Install |
+|---|---|
+| Claude Code | `git clone https://github.com/kims6305-bjk/app-security-guardian ~/.claude/skills/app-security-guardian` |
+| Codex CLI | `git clone https://github.com/kims6305-bjk/app-security-guardian ~/.codex/skills/app-security-guardian` |
+| Hermes Agent | `git clone https://github.com/kims6305-bjk/app-security-guardian ~/.hermes/skills/security/app-security-guardian` |
+| OpenClaw | `git clone https://github.com/kims6305-bjk/app-security-guardian <workspace>/skills/app-security-guardian` |
+
+Then run the one-time setup from [Install](#install) inside that folder. The skill tells the agent to confirm ownership before testing, stay on 127.0.0.1, and never print secret values.
+
 ## Install
 
 ```bash
@@ -63,6 +76,10 @@ python3 reports/run_tests.py
 - **Unit tests** against synthetic fixtures: `fixtures/vuln-js` (intentionally vulnerable; the key in it is fake) must be flagged by every tool, and `fixtures/safe-js` must produce zero high-severity findings. Blackbox/attack tests run against throwaway servers on 127.0.0.1.
 - **Mutation testing**: the gate deliberately breaks the checks (e.g. drops traversal detection, reports a crashed Semgrep as clean, turns off `--redact`) and requires the tests to **fail** each time. A test suite that passes on broken code proves nothing.
 - Current gate: 32 tests pass, 23/23 mutants killed.
+
+## Hardening the agent applies (with your go-ahead)
+
+When used as a skill, the agent turns findings into fixes: security headers (CSP, `X-Frame-Options: DENY`, `nosniff`), confining static file serving to the public dir, dropping a wildcard CORS, upgrading flagged packages, rotating leaked keys, and, on request, a **`robots.txt` that asks all crawlers to stay out** (`User-agent: *` / `Disallow: /`). Note: robots.txt is honored only by well-behaved bots. It is not access control, and it also hides the site from search engines. Each fix is re-checked with the same mode.
 
 ## Limitations
 

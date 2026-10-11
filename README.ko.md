@@ -27,6 +27,19 @@
 - 비밀키 값·소스 원문·응답 본문은 보고서에 남기지 않음 (gitleaks `--redact`)
 - 도구 하나라도 없거나 실패하면 **exit 3(PARTIAL)** — 절대 "깨끗함"으로 보고하지 않음
 
+## 에이전트 스킬로 쓰기
+
+레포 루트가 그대로 스킬입니다(`SKILL.md`, 표준 `name`·`description` 머리말). 에이전트의 스킬 폴더에 clone한 뒤 *"./my-app 보안 점검해줘"* 처럼 말하면 됩니다.
+
+| 에이전트 | 설치 |
+|---|---|
+| Claude Code | `git clone https://github.com/kims6305-bjk/app-security-guardian ~/.claude/skills/app-security-guardian` |
+| Codex CLI | `git clone https://github.com/kims6305-bjk/app-security-guardian ~/.codex/skills/app-security-guardian` |
+| Hermes Agent | `git clone https://github.com/kims6305-bjk/app-security-guardian ~/.hermes/skills/security/app-security-guardian` |
+| OpenClaw | `git clone https://github.com/kims6305-bjk/app-security-guardian <workspace>/skills/app-security-guardian` |
+
+그다음 그 폴더에서 [설치](#설치)의 1회 준비를 실행하세요. 스킬은 에이전트에게 점검 전 소유 확인, 127.0.0.1 한정, 비밀값 출력 금지를 지시합니다.
+
 ## 설치
 
 ```bash
@@ -63,6 +76,10 @@ python3 reports/run_tests.py
 - **단위 테스트**: `fixtures/vuln-js`(일부러 취약하게 만든 샘플, 안의 키는 가짜)는 모든 도구가 잡아야 하고, `fixtures/safe-js`는 high 0건이어야 합니다. blackbox·attack 테스트는 127.0.0.1의 일회용 서버로 돌립니다.
 - **뮤테이션 검사**: 검사 로직을 일부러 망가뜨린 사본(경로 탈출 탐지 제거, Semgrep 오류를 깨끗함으로 보고, `--redact` 끄기 등)에서 테스트가 **실패해야** 통과입니다. 망가진 코드에서도 통과하는 테스트는 아무것도 증명하지 못하니까요.
 - 현재 게이트: 테스트 32개 통과, 뮤턴트 23/23 검출.
+
+## 에이전트가 적용하는 보강 (사용자 승인 후)
+
+스킬로 쓰면 에이전트가 발견 항목을 수정안으로 바꿔 적용합니다. 보안 헤더(CSP, `X-Frame-Options: DENY`, `nosniff`), 정적 파일 제공을 public 폴더로 제한, CORS 와일드카드 제거, 취약 패키지 업그레이드, 유출 키 재발급을 다룹니다. 요청하면 **모든 크롤러 접근을 거부하는 `robots.txt`**(`User-agent: *` / `Disallow: /`)도 설정합니다. 단, robots.txt는 규칙을 지키는 봇만 따릅니다. 접근 차단 수단이 아니고, 검색엔진 노출도 함께 사라집니다. 수정 후에는 같은 모드로 다시 점검합니다.
 
 ## 한계
 
