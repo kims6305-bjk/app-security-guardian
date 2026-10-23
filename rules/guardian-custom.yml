@@ -1,0 +1,35 @@
+# Guardian's own rules (not from the Semgrep registry). Added 2026-10-23 after ARTEX review:
+# the registry rules missed all three of these in a Go+Next app.
+rules:
+  - id: cors-wildcard-origin
+    languages: [generic]
+    severity: WARNING
+    message: CORS allows any origin (*). Any website can read these responses from a visitor's browser; list the allowed origins instead.
+    paths:
+      include: ["*.go", "*.js", "*.mjs", "*.cjs", "*.ts", "*.py", "*.java", "*.rb", "*.php"]
+    pattern-regex: (?i)(access-control-allow-origin["']?\s*[,:=\]]\s*["']\*["']|allow_origins\s*=\s*\[\s*["']\*["']|\borigin\s*:\s*["']\*["'])
+
+  - id: listen-all-interfaces
+    languages: [generic]
+    severity: WARNING
+    message: Server listens on all network interfaces by default (":PORT" / 0.0.0.0). Other machines on the network can reach it; default to 127.0.0.1 unless it is meant to be public.
+    paths:
+      include: ["*.go", "*.js", "*.mjs", "*.cjs", "*.ts", "*.py"]
+    pattern-regex: (ListenAndServe(TLS)?\(\s*"(0\.0\.0\.0)?:\d+"|flag\.String\(\s*"(addr|listen|bind|host)[^"]*"\s*,\s*"(0\.0\.0\.0)?:\d+"|\bhost\s*=\s*["']0\.0\.0\.0["']|\.listen\([^)]*["']0\.0\.0\.0["'])
+
+  - id: node-listen-all-interfaces
+    languages: [generic]
+    severity: WARNING
+    message: Node listen() without a host binds all network interfaces. Pass '127.0.0.1' as the host unless it is meant to be public.
+    paths:
+      include: ["*.js", "*.mjs", "*.cjs", "*.ts"]
+    # ponytail: regex sees only listen(PORT) / listen(PORT, callback); listen({port}) object form is not covered
+    pattern-regex: \.listen\(\s*[\w.]+\s*(\)|,\s*(\(|function\b|async\b))
+
+  - id: compose-port-all-interfaces
+    languages: [generic]
+    severity: INFO
+    message: Docker publishes this port on all host interfaces. Use "127.0.0.1:HOST:CONTAINER" unless it is meant to be public.
+    paths:
+      include: ["*compose*.yml", "*compose*.yaml"]
+    pattern-regex: (?m)^\s*-\s*["']?\d+:\d+["']?\s*$

@@ -15,8 +15,8 @@
 
 | 모드 | 점검 내용 | 엔진 |
 |---|---|---|
-| `scan` (화이트박스) | 기본 규칙팩 기준 20개+ 언어의 위험 코드 패턴(JS/TS·Python·Java·Go·Ruby·PHP·Terraform…), 작업폴더 **및 git 기록**의 비밀키, 알려진 취약 의존성, 내장 Python AST 검사 | Semgrep, gitleaks, osv-scanner |
-| `blackbox` | 보안 헤더(CSP·프레이밍·nosniff), 쿠키 플래그, 경로 탈출(`/../`), CORS 와일드카드 | Python 표준 라이브러리 (GET 4회) |
+| `scan` (화이트박스) | 기본 규칙팩 기준 20개+ 언어의 위험 코드 패턴(JS/TS·Python·Java·Go·Ruby·PHP·Terraform…), 작업폴더 **및 git 기록**의 비밀키, 알려진 취약 의존성, 내장 Python AST 검사, 자체 규칙(CORS `*` / 모든 인터페이스로 여는 서버 / 모든 인터페이스로 공개한 Docker 포트), 테스트 파일에서 나온 비밀키는 지우지 않고 low로 낮춤 | Semgrep, gitleaks, osv-scanner |
+| `blackbox` | 보안 헤더(CSP·프레이밍·nosniff), 쿠키 플래그, 경로 탈출(`/../`), CORS 와일드카드, **첫 관리자 설정 무인증 노출**(상태 API가 "관리자 없음"이라 답하면 먼저 접속한 사람이 관리자가 됨 · GET만 사용), **다른 기기에서 접속 가능한 바인딩**(`lsof`로 확인, 네트워크 요청 없음) | Python 표준 라이브러리 (GET 8회) + lsof |
 | `attack` | 알려진 시그니처 능동 점검: 노출된 `.git/config`·`.env`, 알려진 취약점 템플릿 | nuclei (OAST 끔, dos·fuzz·intrusive 제외) |
 
 ## 안전장치 (문서가 아니라 코드로 강제)
@@ -75,7 +75,7 @@ python3 reports/run_tests.py
 
 - **단위 테스트**: `fixtures/vuln-js`(일부러 취약하게 만든 샘플, 안의 키는 가짜)는 모든 도구가 잡아야 하고, `fixtures/safe-js`는 high 0건이어야 합니다. blackbox·attack 테스트는 127.0.0.1의 일회용 서버로 돌립니다.
 - **뮤테이션 검사**: 검사 로직을 일부러 망가뜨린 사본(경로 탈출 탐지 제거, Semgrep 오류를 깨끗함으로 보고, `--redact` 끄기 등)에서 테스트가 **실패해야** 통과입니다. 망가진 코드에서도 통과하는 테스트는 아무것도 증명하지 못하니까요.
-- 현재 게이트: 테스트 32개 통과, 뮤턴트 23/23 검출.
+- 현재 게이트: 테스트 35개 통과, 뮤턴트 27/27 검출.
 
 ## 에이전트가 적용하는 보강 (사용자 승인 후)
 

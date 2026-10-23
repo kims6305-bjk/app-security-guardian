@@ -1,4 +1,5 @@
-rules/
+rules/p-*.yml
+rules/MANIFEST.json
 __pycache__/
 *.pyc
 reports/test-results.txt

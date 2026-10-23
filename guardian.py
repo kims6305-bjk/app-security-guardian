@@ -9,16 +9,42 @@ No destructive exploitation (attack = nuclei signature checks only), no remote t
 osv-scanner --offline-vulnerabilities, gitleaks --redact. Source snippets and secret values are never reported.
 Exit: 0 clean (all tools ran) · 1 findings · 2 refused · 3 partial (a tool missing/failed) — 3 is never "clean".
 """
-import argparse, hashlib, http.client, json, os, shutil, subprocess, sys, tempfile
+import argparse, hashlib, http.client, json, os, re, shutil, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import origin, runner  # noqa: E402
 
-VERSION = "0.4.0"
-RULES = [os.path.join(HERE, "rules", f"p-{p}.yml") for p in ("default", "javascript", "nodejs", "xss", "secrets", "python")]
+VERSION = "0.5.0"
+RULES = [os.path.join(HERE, "rules", f"p-{p}.yml") for p in ("default", "javascript", "nodejs", "xss", "secrets", "python")] + \
+        [os.path.join(HERE, "rules", "guardian-custom.yml")]  # ours: CORS *, listen on all interfaces, compose port on all interfaces
 EXCLUDE = ["node_modules", "upstream", ".git", "venv", ".venv", "dist", "build", "*.bak.*", "*.min.js"]
 SEV = {"ERROR": "high", "WARNING": "medium", "INFO": "low"}
+TESTFILE = re.compile(r"(^|/)(tests?|__tests__|fixtures?|testdata|spec)/|_test\.(go|py)$|(^|/)test_[^/]*\.py$|\.(test|spec)\.[cm]?[jt]sx?$")
+SETUP_PATHS = ("/api/auth/status", "/api/setup/status", "/api/setup", "/api/status")
+# ponytail: key-name heuristic for "admin not yet set"; add an app-specific path/key when a new framework is missed
+_NOT_SET = ("initialized", "setup_complete", "setupcomplete", "has_admin", "hasadmin", "password_set", "passwordset", "configured")
+_NEEDS = ("needs_setup", "needssetup", "setup_required", "setuprequired", "first_run", "firstrun")
+
+
+def _setup_open(body):
+    """Return the key that says the first-run admin is unclaimed, else None. Body values are never reported."""
+    try:
+        d = json.loads(body)
+    except ValueError:
+        return None
+    if not isinstance(d, dict):
+        return None
+    for k, v in d.items():
+        kl = k.lower()
+        if (kl in _NOT_SET and v is False) or (kl in _NEEDS and v is True):
+            return k
+    return None
+
+
+def _exposed(addrs):
+    """lsof 'host:port' listen addresses -> True if any is not loopback (*, 0.0.0.0, [::], LAN/VPN IP)."""
+    return any(not (h.startswith("127.") or h in ("[::1]", "localhost")) for h in (a.rsplit(":", 1)[0] for a in addrs))
 
 
 def _run(cmd, timeout=600):
@@ -76,10 +102,12 @@ def _gitleaks(root):
             with open(rep) as fh:
                 found = json.load(fh)
             for r in found:  # Match/Secret deliberately dropped
-                fs.append({"path": os.path.relpath(r.get("File", ""), root) if mode == "dir" else r.get("File", ""),
-                           "line": r.get("StartLine"), "rule": r.get("RuleID"), "severity": "high",
+                path = os.path.relpath(r.get("File", ""), root) if mode == "dir" else r.get("File", "")
+                test = bool(TESTFILE.search(path))  # dummy keys in tests: kept but downgraded, never dropped
+                fs.append({"path": path, "line": r.get("StartLine"), "rule": r.get("RuleID"), "severity": "low" if test else "high",
                            "where": "git history " + r.get("Commit", "")[:7] if mode == "git" else "working tree",
-                           "message": "possible secret (value redacted) — rotate if real"})
+                           "message": ("in a test/fixture file — likely a dummy, confirm" if test else
+                                       "possible secret (value redacted) — rotate if real")})
         return {"status": "ok", "modes": [m for m, _ in targets], "findings": fs}
 
 
@@ -159,12 +187,33 @@ def blackbox(url, authorized):
                       "detail": f"Access-Control-Allow-Origin: {acao or '(none)'}" + (" — any site can read responses" if bad else "")})
     except (OSError, http.client.HTTPException) as e:
         extra.append({"id": "extra-probes", "status": "error", "detail": type(e).__name__})
-    sev = {"path-traversal": "high", "cors": "medium"}
+    try:
+        # first-run setup still open: a status endpoint says "no admin yet" -> whoever reaches the port first claims admin
+        hits = []
+        for p in SETUP_PATHS:
+            st, _, body = _get(port, p)
+            k = _setup_open(body) if st == 200 else None
+            if k:
+                hits.append(f"{p} ({k})")
+        extra.append({"id": "open-setup", "status": "finding" if hits else "pass",
+                      "detail": ("first-run admin setup still open: " + ", ".join(hits)) if hits else f"{len(SETUP_PATHS)} setup-status paths: none report an unclaimed admin"})
+    except (OSError, http.client.HTTPException) as e:
+        extra.append({"id": "open-setup", "status": "error", "detail": type(e).__name__})
+    # listen address: local process table only (lsof), no network traffic
+    rc, out, _ = _run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-F", "n"], timeout=15) if shutil.which("lsof") else (None, "", "")
+    addrs = sorted({l[1:] for l in out.splitlines() if l.startswith("n")})
+    if not addrs:
+        extra.append({"id": "bind", "status": "error", "detail": "listen address not determined (lsof missing or process not visible)"})
+    else:
+        exposed = _exposed(addrs)
+        extra.append({"id": "bind", "status": "finding" if exposed else "pass",
+                      "detail": f"listening on {', '.join(addrs)}" + (" — reachable from other machines (bind 127.0.0.1 unless intended)" if exposed else "")})
+    sev = {"path-traversal": "high", "cors": "medium", "open-setup": "high", "bind": "medium"}
     new = [{"id": x["id"], "severity": sev.get(x["id"]), "detail": x["detail"]} for x in extra if x["status"] == "finding"]
     rep["checks"] += extra
     rep["findings"] += new
     rep["findings_count"] = len(rep["findings"])
-    rep["limits"]["requests"] = 4
+    rep["limits"]["requests"] = 4 + len(SETUP_PATHS)
     if any(x["status"] == "error" for x in extra):
         return 3, {**rep, "ok": False, "verdict": "PARTIAL — extra probes failed"}
     return (1 if rep["findings"] else 0), rep

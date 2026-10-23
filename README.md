@@ -15,8 +15,8 @@ Small teams and solo builders ship web apps without a security review. Commercia
 
 | Mode | What it checks | Engine |
 |---|---|---|
-| `scan` (white-box) | Risky code patterns in 20+ languages with the default rule packs (JS/TS, Python, Java, Go, Ruby, PHP, Terraform…), secrets in the working tree **and git history**, known-vulnerable dependencies, built-in Python AST checks | Semgrep, gitleaks, osv-scanner |
-| `blackbox` | Security headers (CSP, framing, nosniff), cookie flags, path traversal (`/../`), CORS wildcard | Python stdlib (4 GETs) |
+| `scan` (white-box) | Risky code patterns in 20+ languages with the default rule packs (JS/TS, Python, Java, Go, Ruby, PHP, Terraform…), secrets in the working tree **and git history**, known-vulnerable dependencies, built-in Python AST checks, own rules for CORS `*` / servers listening on all interfaces / Docker ports published on all interfaces (secrets found in test files are kept but downgraded to low) | Semgrep, gitleaks, osv-scanner |
+| `blackbox` | Security headers (CSP, framing, nosniff), cookie flags, path traversal (`/../`), CORS wildcard, **unclaimed first-run admin setup** (status endpoint says no admin yet — anyone who reaches the port first becomes admin; GET only), **listen address reachable from other machines** (`lsof`, no network traffic) | Python stdlib (8 GETs) + lsof |
 | `attack` | Active known-signature probes: exposed `.git/config`, `.env`, known-vulnerability templates | nuclei (no OAST, no dos/fuzz/intrusive) |
 
 ## Guardrails (enforced in code, not just documented)
@@ -75,7 +75,7 @@ python3 reports/run_tests.py
 
 - **Unit tests** against synthetic fixtures: `fixtures/vuln-js` (intentionally vulnerable; the key in it is fake) must be flagged by every tool, and `fixtures/safe-js` must produce zero high-severity findings. Blackbox/attack tests run against throwaway servers on 127.0.0.1.
 - **Mutation testing**: the gate deliberately breaks the checks (e.g. drops traversal detection, reports a crashed Semgrep as clean, turns off `--redact`) and requires the tests to **fail** each time. A test suite that passes on broken code proves nothing.
-- Current gate: 32 tests pass, 23/23 mutants killed.
+- Current gate: 35 tests pass, 27/27 mutants killed.
 
 ## Hardening the agent applies (with your go-ahead)
 

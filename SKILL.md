@@ -38,7 +38,7 @@ Python 3.9+ stdlib only. After setup, scans run offline (Semgrep `--metrics=off`
    ```bash
    python3 guardian.py blackbox http://127.0.0.1:3000/ --authorized
    ```
-   Checks CSP / framing / nosniff, cookie flags, `/../` traversal, CORS wildcard. Uses 4 GETs.
+   Checks CSP / framing / nosniff, cookie flags, `/../` traversal, CORS wildcard, an unclaimed first-run admin setup (GET only, never POSTs), and whether the port listens on a non-loopback address (`lsof`, no traffic). Uses 8 GETs.
 
 3. **Active signature check** (optional, takes minutes):
    ```bash

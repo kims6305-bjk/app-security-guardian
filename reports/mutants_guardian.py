@@ -4,15 +4,19 @@ SRC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MUTANTS = [
     ("traversal never flagged", 'leak = st == 200 and', 'leak = False and'),
     ("cors never flagged", 'bad = acao in ("*", "https://guardian-cors-probe.invalid")', 'bad = False'),
-    ("gitleaks findings dropped", 'fs.append({"path": os.path.relpath(r.get("File", ""), root)', 'None and fs.append({"path": os.path.relpath(r.get("File", ""), root)'),
+    ("gitleaks findings dropped", 'fs.append({"path": path,', 'None and fs.append({"path": path,'),
     ("semgrep error reported clean", 'return {"status": "error", "reason": "rules missing', 'return {"status": "ok", "reason": "rules missing'),
+    ("open-setup never flagged", 'if k:\n                hits.append', 'if False:\n                hits.append'),
+    ("bind exposure never flagged", 'return any(not (h.startswith("127.")', 'return False and any(not (h.startswith("127.")'),
+    ("custom rules not loaded", '+ \\\n        [os.path.join(HERE, "rules", "guardian-custom.yml")]', ''),
+    ("test-file secrets not downgraded", 'test = bool(TESTFILE.search(path))', 'test = False'),
     # (no mutant removes the loopback gate: that mutant would send real traffic to a remote host)
     ("attack --authorized gate removed", 'return 2, {**base, "error": "refused: --authorized not given (no request sent)"}', 'pass'),
     ("attack findings dropped", "fs.append({\"rule\": r.get(\"template-id\")", "None and fs.append({\"rule\": r.get(\"template-id\")"),
     ("secret value leaked (redact off + Secret echoed)", '"--redact", ', ''),
 ]
 EXTRA = {"secret value leaked (redact off + Secret echoed)":
-         ('"message": "possible secret (value redacted) — rotate if real"', '"message": r.get("Secret")')}
+         ('"message": ("in a test/fixture file', '"message": r.get("Secret") or ("in a test/fixture file')}
 killed = 0
 for name, a, b in MUTANTS:
     with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR")) as t:
